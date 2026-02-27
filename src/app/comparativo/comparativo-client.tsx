@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
 import { ShareButtons } from "@/components/share-buttons";
 import {
   BarChart,
@@ -35,6 +35,11 @@ interface ComparativoClientProps {
     };
   } | null;
   trend: YearComparisonData[];
+  yearMonthCounts: { year: number; monthCount: number }[];
+}
+
+function formatMillions(v: number): string {
+  return `${Math.round(v / 1_000_000)}M`;
 }
 
 function GrowthIndicator({ value }: { value: number }) {
@@ -105,13 +110,14 @@ export function ComparativoClient({
   availableYears,
   comparison,
   trend,
+  yearMonthCounts,
 }: ComparativoClientProps) {
   const router = useRouter();
   const [showAllOrgaos, setShowAllOrgaos] = useState(false);
 
   type SortKey = "orgao" | "y1" | "y2" | "variation";
   type SortDir = "asc" | "desc";
-  const [sortBy, setSortBy] = useState<SortKey>("y2");
+  const [sortBy, setSortBy] = useState<SortKey>("y1");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const handleSort = (key: SortKey) => {
@@ -123,22 +129,34 @@ export function ComparativoClient({
     }
   };
 
+  const yearMonthMap = new Map(yearMonthCounts.map((y) => [y.year, y.monthCount]));
+  const currentYear = new Date().getFullYear();
+  const incompleteYears = yearMonthCounts
+    .filter((y) => y.monthCount < 12)
+    .map((y) => ({
+      year: y.year,
+      monthCount: y.monthCount,
+      isCurrentYear: y.year === currentYear,
+    }));
+
+  const getMonthCountWarning = (year: number) => {
+    const count = yearMonthMap.get(year);
+    if (!count || count >= 12) return null;
+    const isCurrent = year === currentYear;
+    return { count, isCurrent };
+  };
+
   const comparisonData = comparison
     ? [
         {
-          name: "Total Acima do Teto",
-          [year1]: comparison.year1.totalAboveTeto,
-          [year2]: comparison.year2.totalAboveTeto,
-        },
-        {
-          name: "Membros Acima",
-          [year1]: comparison.year1.membersAboveTeto,
-          [year2]: comparison.year2.membersAboveTeto,
+          name: "Membros Acima do Teto",
+          year1Val: comparison.year1.membersAboveTeto,
+          year2Val: comparison.year2.membersAboveTeto,
         },
         {
           name: "Média por Membro",
-          [year1]: comparison.year1.averageAboveTeto,
-          [year2]: comparison.year2.averageAboveTeto,
+          year1Val: comparison.year1.averageAboveTeto,
+          year2Val: comparison.year2.averageAboveTeto,
         },
       ]
     : [];
@@ -146,7 +164,7 @@ export function ComparativoClient({
   const trendData = trend.map((t) => ({
     year: t.year,
     "Total Acima do Teto": t.totalAboveTeto,
-    "Membros Acima": t.membersAboveTeto,
+    "Membros Acima do Teto": t.membersAboveTeto,
     "Média por Membro": t.averageAboveTeto,
   }));
 
@@ -233,6 +251,23 @@ export function ComparativoClient({
           </div>
         </div>
 
+        {/* Warning about incomplete years */}
+        {incompleteYears.length > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <div>
+              <span className="font-medium">Nota: </span>
+              {incompleteYears.map((y, i) => (
+                <span key={y.year}>
+                  {i > 0 && ", "}
+                  O ano de {y.year} possui dados de {y.monthCount} mês{y.monthCount > 1 ? "es" : ""}
+                  {y.isCurrentYear ? " (esperado para ano atual)" : " (incompleto)"}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Section Label: Historical Trend */}
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
           Tendência Histórica
@@ -252,7 +287,7 @@ export function ComparativoClient({
                   <YAxis
                     yAxisId="left"
                     tick={{ fontSize: 10, fill: "#94A3B8" }}
-                    tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                    tickFormatter={formatMillions}
                   />
                   <YAxis
                     yAxisId="right"
@@ -260,8 +295,11 @@ export function ComparativoClient({
                     tick={{ fontSize: 10, fill: "#94A3B8" }}
                   />
                   <Tooltip
-                    formatter={(value) => {
+                    formatter={(value, name) => {
                       const numValue = Number(value);
+                      if (name === "Membros Acima do Teto") {
+                        return formatNumber(numValue);
+                      }
                       if (numValue > 1000000) {
                         return formatCompactCurrency(numValue);
                       }
@@ -280,7 +318,7 @@ export function ComparativoClient({
                   <Line
                     yAxisId="right"
                     type="monotone"
-                    dataKey="Membros Acima"
+                    dataKey="Membros Acima do Teto"
                     stroke="#3B82F6"
                     strokeWidth={2}
                     dot={{ r: 4, fill: "#3B82F6" }}
@@ -310,6 +348,14 @@ export function ComparativoClient({
                 </option>
               ))}
             </select>
+            {getMonthCountWarning(year1) && (
+              <div 
+                className="flex items-center" 
+                title={getMonthCountWarning(year1)?.isCurrent ? `Dados de ${getMonthCountWarning(year1)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year1)?.count} meses (incompleto)`}
+              >
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+              </div>
+            )}
           </div>
           <span className="text-gray-400">vs</span>
           <div className="flex items-center gap-2">
@@ -324,6 +370,14 @@ export function ComparativoClient({
                 </option>
               ))}
             </select>
+            {getMonthCountWarning(year2) && (
+              <div 
+                className="flex items-center" 
+                title={getMonthCountWarning(year2)?.isCurrent ? `Dados de ${getMonthCountWarning(year2)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year2)?.count} meses (incompleto)`}
+              >
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -383,7 +437,7 @@ export function ComparativoClient({
         {/* Comparison Chart */}
         <section className="mb-6 rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
           <h2 className="mb-4 font-serif text-lg font-bold text-navy">
-            Comparação entre {year1} e {year2}
+            Comparação de membros entre {year1} e {year2}
           </h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -393,7 +447,11 @@ export function ComparativoClient({
                 margin={{ left: 120, right: 30 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" tick={{ fontSize: 10, fill: "#94A3B8" }} />
+                <XAxis 
+                  type="number" 
+                  tick={{ fontSize: 10, fill: "#94A3B8" }}
+                  tickFormatter={formatMillions}
+                />
                 <YAxis
                   type="category"
                   dataKey="name"
@@ -401,17 +459,35 @@ export function ComparativoClient({
                   width={110}
                 />
                 <Tooltip
-                  formatter={(value) => {
-                    const numValue = Number(value);
-                    if (numValue > 1000) {
-                      return formatCurrency(numValue);
-                    }
-                    return formatNumber(numValue);
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    
+                    const dataName = payload[0]?.payload?.name;
+                    
+                    return (
+                      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                        <div className="mb-2 font-medium text-gray-700">{dataName}</div>
+                        {payload.map((entry) => (
+                          <div key={entry.dataKey} className="flex items-center gap-2 text-sm">
+                            <span 
+                              className="h-2.5 w-2.5 rounded-full" 
+                              style={{ backgroundColor: entry.color }}
+                            />
+                            <span className="text-gray-500">{entry.name}:</span>
+                            <span className="font-medium text-gray-700">
+                              {dataName === "Membros Acima do Teto" 
+                                ? formatNumber(Number(entry.value)) 
+                                : formatCurrency(Number(entry.value))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   }}
                 />
                 <Legend />
-                <Bar dataKey={year1} fill="#94A3B8" name={String(year1)} radius={[0, 4, 4, 0]} />
-                <Bar dataKey={year2} fill="#DC2626" name={String(year2)} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="year1Val" fill="#94A3B8" name={String(year1)} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="year2Val" fill="#DC2626" name={String(year2)} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -493,7 +569,7 @@ export function ComparativoClient({
           {allOrgaos.length > 5 && (
             <button
               onClick={() => setShowAllOrgaos(!showAllOrgaos)}
-              className="mt-3 flex items-center gap-1 text-sm text-blue-600 hover:underline"
+              className="mt-3 flex cursor-pointer items-center gap-1 text-sm text-blue-600 hover:underline"
             >
               {showAllOrgaos ? (
                 <>

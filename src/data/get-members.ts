@@ -482,3 +482,30 @@ export const getCachedAllYearsTrend = unstable_cache(
   ["all-years-trend"],
   { revalidate: 600 }
 );
+
+export function getYearMonthCounts(): { year: number; monthCount: number }[] {
+  try {
+    const db = openDB();
+    if (!db) return [];
+
+    const rows = db
+      .prepare(
+        `SELECT ano_referencia as year, COUNT(DISTINCT mes_referencia) as monthCount
+         FROM membros
+         GROUP BY ano_referencia
+         ORDER BY ano_referencia`
+      )
+      .all() as { year: number; monthCount: number }[];
+
+    db.close();
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+export const getCachedYearMonthCounts = unstable_cache(
+  async () => getYearMonthCounts(),
+  ["year-month-counts"],
+  { revalidate: 600 }
+);

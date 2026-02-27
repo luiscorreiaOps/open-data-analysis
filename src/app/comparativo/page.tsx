@@ -1,4 +1,4 @@
-import { getYearComparison, getCachedAllYearsTrend, getCachedAvailableYears, type YearComparisonData } from "@/data/get-members";
+import { getYearComparison, getCachedAllYearsTrend, getCachedAvailableYears, getCachedYearMonthCounts } from "@/data/get-members";
 import { ComparativoClient } from "./comparativo-client";
 
 interface Props {
@@ -22,6 +22,7 @@ export default async function ComparativoPage({ searchParams }: Props) {
 
   const comparison = getYearComparison(year1, year2);
   const trend = await getCachedAllYearsTrend();
+  const yearMonthCounts = await getCachedYearMonthCounts();
 
   return (
     <ComparativoClient
@@ -30,6 +31,7 @@ export default async function ComparativoPage({ searchParams }: Props) {
       availableYears={availableYears}
       comparison={comparison}
       trend={trend}
+      yearMonthCounts={yearMonthCounts}
     />
   );
 }

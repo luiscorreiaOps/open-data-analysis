@@ -65,6 +65,7 @@ export default function RootLayout({
       <head />
       <body
         className={`${playfair.variable} ${dmSans.variable} font-sans antialiased`}
+        suppressHydrationWarning
       >
         <JsonLd data={getWebsiteJsonLd()} />
         <JsonLd data={getDatasetJsonLd()} />
