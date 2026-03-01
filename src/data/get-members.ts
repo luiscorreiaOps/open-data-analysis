@@ -491,16 +491,17 @@ export function getAnomalias(ano: number, minVariacaoPct = 200): Anomalia[] {
   });
 }
 
-function getYearAggregates(year: number): YearComparisonData | null {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getYearAggregates(year: number, existingDb?: any): YearComparisonData | null {
   try {
-    const db = openDB();
+    const db = existingDb || openDB();
     if (!db) return null;
 
     const rows = db
       .prepare(
         `SELECT
           COUNT(DISTINCT nome || '-' || orgao) as total_members,
-          SUM(CASE WHEN acima_teto > 0 THEN 1 ELSE 0 END) as members_above_teto,
+          COUNT(DISTINCT CASE WHEN acima_teto > 0 THEN nome || '-' || orgao END) as members_above_teto,
           SUM(acima_teto) as total_above_teto,
           AVG(CASE WHEN acima_teto > 0 THEN acima_teto END) as average_above_teto,
           AVG(remuneracao_total) as average_total_remuneration
@@ -517,7 +518,7 @@ function getYearAggregates(year: number): YearComparisonData | null {
 
     const topOrgansRows = db
       .prepare(
-        `SELECT orgao, SUM(acima_teto) as total
+        `SELECT orgao, SUM(acima_teto) / COUNT(DISTINCT mes_referencia) as total
          FROM membros
          WHERE ano_referencia = ? AND acima_teto > 0
          GROUP BY orgao
@@ -527,7 +528,7 @@ function getYearAggregates(year: number): YearComparisonData | null {
 
     const topStateRow = db
       .prepare(
-        `SELECT estado, SUM(acima_teto) as total
+        `SELECT estado, SUM(acima_teto) / COUNT(DISTINCT mes_referencia) as total
          FROM membros
          WHERE ano_referencia = ? AND acima_teto > 0
          GROUP BY estado
@@ -536,7 +537,7 @@ function getYearAggregates(year: number): YearComparisonData | null {
       )
       .get(year) as { estado: string; total: number } | undefined;
 
-    db.close();
+    if (!existingDb) db.close();
 
     if (!rows) return null;
 
@@ -564,24 +565,33 @@ export function getYearComparison(year1: number, year2: number): {
     averageAboveTeto: number;
   };
 } | null {
-  const y1 = getYearAggregates(year1);
-  const y2 = getYearAggregates(year2);
+  try {
+    const db = openDB();
+    if (!db) return null;
 
-  if (!y1 || !y2) return null;
+    const y1 = getYearAggregates(year1, db);
+    const y2 = getYearAggregates(year2, db);
 
-  const growth = {
-    membersAboveTeto: y1.membersAboveTeto > 0
-      ? ((y2.membersAboveTeto - y1.membersAboveTeto) / y1.membersAboveTeto) * 100
-      : 0,
-    totalAboveTeto: y1.totalAboveTeto > 0
-      ? ((y2.totalAboveTeto - y1.totalAboveTeto) / y1.totalAboveTeto) * 100
-      : 0,
-    averageAboveTeto: y1.averageAboveTeto > 0
-      ? ((y2.averageAboveTeto - y1.averageAboveTeto) / y1.averageAboveTeto) * 100
-      : 0,
-  };
+    db.close();
 
-  return { year1: y1, year2: y2, growth };
+    if (!y1 || !y2) return null;
+
+    const growth = {
+      membersAboveTeto: y1.membersAboveTeto > 0
+        ? ((y2.membersAboveTeto - y1.membersAboveTeto) / y1.membersAboveTeto) * 100
+        : 0,
+      totalAboveTeto: y1.totalAboveTeto > 0
+        ? ((y2.totalAboveTeto - y1.totalAboveTeto) / y1.totalAboveTeto) * 100
+        : 0,
+      averageAboveTeto: y1.averageAboveTeto > 0
+        ? ((y2.averageAboveTeto - y1.averageAboveTeto) / y1.averageAboveTeto) * 100
+        : 0,
+    };
+
+    return { year1: y1, year2: y2, growth };
+  } catch {
+    return null;
+  }
 }
 
 export function getAllYearsTrend(): YearComparisonData[] {
@@ -593,7 +603,7 @@ export function getAllYearsTrend(): YearComparisonData[] {
       SELECT 
         ano_referencia as year,
         COUNT(DISTINCT nome || '-' || orgao) as totalMembers,
-        SUM(CASE WHEN acima_teto > 0 THEN 1 ELSE 0 END) as membersAboveTeto,
+        COUNT(DISTINCT CASE WHEN acima_teto > 0 THEN nome || '-' || orgao END) as membersAboveTeto,
         SUM(acima_teto) as totalAboveTeto,
         AVG(CASE WHEN acima_teto > 0 THEN acima_teto END) as averageAboveTeto,
         AVG(remuneracao_total) as averageTotalRemuneration

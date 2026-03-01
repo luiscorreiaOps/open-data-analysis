@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, AlertTriangle, DollarSign, Users, Calculator } from "lucide-react";
 import { ShareButtons } from "@/components/share-buttons";
 import {
   BarChart,
@@ -42,26 +42,30 @@ function formatMillions(v: number): string {
   return `${Math.round(v / 1_000_000)}M`;
 }
 
-function GrowthIndicator({ value }: { value: number }) {
+function GrowthBadge({ value, size = "sm" }: { value: number; size?: "sm" | "lg" }) {
+  const textSize = size === "lg" ? "text-sm" : "text-xs";
+  const iconSize = size === "lg" ? "h-3.5 w-3.5" : "h-3 w-3";
+  const padding = size === "lg" ? "px-2.5 py-1" : "px-2 py-0.5";
+
   if (value > 0) {
     return (
-      <span className="flex items-center justify-end gap-1 text-sm font-bold text-red-600">
-        <TrendingUp className="h-4 w-4" />
+      <span className={`inline-flex items-center gap-1 rounded-full bg-red-100 ${padding} ${textSize} font-bold text-red-700`}>
+        <TrendingUp className={iconSize} />
         +{value.toFixed(1)}%
       </span>
     );
   }
   if (value < 0) {
     return (
-      <span className="flex items-center justify-end gap-1 text-sm font-bold text-green-600">
-        <TrendingDown className="h-4 w-4" />
+      <span className={`inline-flex items-center gap-1 rounded-full bg-green-100 ${padding} ${textSize} font-bold text-green-700`}>
+        <TrendingDown className={iconSize} />
         {value.toFixed(1)}%
       </span>
     );
   }
   return (
-    <span className="flex items-center justify-end gap-1 text-sm font-bold text-gray-500">
-      <Minus className="h-4 w-4" />
+    <span className={`inline-flex items-center gap-1 rounded-full bg-gray-100 ${padding} ${textSize} font-bold text-gray-500`}>
+      <Minus className={iconSize} />
       0%
     </span>
   );
@@ -75,6 +79,11 @@ function KPICard({
   year2Label,
   growth,
   format,
+  icon: Icon,
+  gradientFrom,
+  borderColor,
+  iconBg,
+  iconColor,
 }: {
   label: string;
   year1Value: number;
@@ -83,22 +92,29 @@ function KPICard({
   year2Label: string;
   growth: number;
   format: (v: number) => string;
+  icon: React.ElementType;
+  gradientFrom: string;
+  borderColor: string;
+  iconBg: string;
+  iconColor: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-      <span className="text-xs font-semibold text-gray-600">{label}</span>
-      <div className="mt-2 flex items-baseline justify-between">
-        <div className="flex flex-col">
-          <span className="text-lg font-bold text-gray-400">{year1Label}</span>
-          <span className="text-xl font-bold text-navy">{format(year1Value)}</span>
+    <div className={`rounded-xl border bg-gradient-to-br to-white p-4 shadow-sm hover:shadow-md transition-shadow ${gradientFrom} ${borderColor}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className={`flex-shrink-0 rounded-lg p-1.5 ${iconBg}`}>
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+          </div>
+          <span className="text-xs font-semibold leading-tight text-gray-500">{label}</span>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-lg font-bold text-gray-400">{year2Label}</span>
-          <span className="text-xl font-bold text-navy">{format(year2Value)}</span>
-        </div>
+        <GrowthBadge value={growth} />
       </div>
-      <div className="mt-3 flex justify-center">
-        <GrowthIndicator value={growth} />
+      <div className="mt-3 pl-0.5">
+        <div className="text-sm text-gray-500">
+          {year1Label}: <span className="font-bold text-gray-600">{format(year1Value)}</span>
+          <span className="mx-1.5 text-gray-300">→</span>
+          {year2Label}: <span className="font-bold text-navy">{format(year2Value)}</span>
+        </div>
       </div>
     </div>
   );
@@ -146,20 +162,20 @@ export function ComparativoClient({
     return { count, isCurrent };
   };
 
-  const comparisonData = comparison
-    ? [
-        {
-          name: "Membros Acima do Teto",
-          year1Val: comparison.year1.membersAboveTeto,
-          year2Val: comparison.year2.membersAboveTeto,
-        },
-        {
-          name: "Média por Membro",
-          year1Val: comparison.year1.averageAboveTeto,
-          year2Val: comparison.year2.averageAboveTeto,
-        },
-      ]
-    : [];
+  const organChartData = useMemo(() => {
+    if (!comparison) return [];
+    const y1Map = new Map(comparison.year1.topOrgans.map((o) => [o.orgao, o.total]));
+    const y2Map = new Map(comparison.year2.topOrgans.map((o) => [o.orgao, o.total]));
+    const allOrgs = new Set([...y1Map.keys(), ...y2Map.keys()]);
+    return Array.from(allOrgs)
+      .map((orgao) => ({
+        orgao,
+        year1Val: y1Map.get(orgao) || 0,
+        year2Val: y2Map.get(orgao) || 0,
+      }))
+      .sort((a, b) => b.year2Val - a.year2Val)
+      .slice(0, 10);
+  }, [comparison]);
 
   const trendData = trend.map((t) => ({
     year: t.year,
@@ -329,60 +345,60 @@ export function ComparativoClient({
           </section>
         )}
 
-        {/* Section Label: Selected Years Comparison */}
-        <h2 className="mt-8 text-sm font-semibold uppercase tracking-wider text-gray-500">
-          Comparativo específico
-        </h2>
-
-        {/* Year Selectors */}
-        <div className="mb-6 flex flex-wrap items-center justify-center gap-4">
+        {/* Section Label + Year Selectors */}
+        <div className="mb-6 mt-8 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+            Comparativo específico
+          </h2>
           <div className="flex items-center gap-2">
-            <select
-              value={year1}
-              onChange={(e) => handleYearChange("ano1", e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-navy shadow-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-            >
-              {availableYears.map((y) => (
-                <option key={y.value} value={y.value}>
-                  {y.label}
-                </option>
-              ))}
-            </select>
-            {getMonthCountWarning(year1) && (
-              <div 
-                className="flex items-center" 
-                title={getMonthCountWarning(year1)?.isCurrent ? `Dados de ${getMonthCountWarning(year1)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year1)?.count} meses (incompleto)`}
+            <div className="flex items-center gap-1.5">
+              <select
+                value={year1}
+                onChange={(e) => handleYearChange("ano1", e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm font-semibold text-navy shadow-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
               >
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-              </div>
-            )}
-          </div>
-          <span className="text-gray-400">vs</span>
-          <div className="flex items-center gap-2">
-            <select
-              value={year2}
-              onChange={(e) => handleYearChange("ano2", e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-navy shadow-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-            >
-              {availableYears.map((y) => (
-                <option key={y.value} value={y.value}>
-                  {y.label}
-                </option>
-              ))}
-            </select>
-            {getMonthCountWarning(year2) && (
-              <div 
-                className="flex items-center" 
-                title={getMonthCountWarning(year2)?.isCurrent ? `Dados de ${getMonthCountWarning(year2)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year2)?.count} meses (incompleto)`}
+                {availableYears.map((y) => (
+                  <option key={y.value} value={y.value}>
+                    {y.label}
+                  </option>
+                ))}
+              </select>
+              {getMonthCountWarning(year1) && (
+                <div
+                  className="flex items-center"
+                  title={getMonthCountWarning(year1)?.isCurrent ? `Dados de ${getMonthCountWarning(year1)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year1)?.count} meses (incompleto)`}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                </div>
+              )}
+            </div>
+            <span className="text-xs font-medium text-gray-400">vs</span>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={year2}
+                onChange={(e) => handleYearChange("ano2", e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm font-semibold text-navy shadow-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
               >
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-              </div>
-            )}
+                {availableYears.map((y) => (
+                  <option key={y.value} value={y.value}>
+                    {y.label}
+                  </option>
+                ))}
+              </select>
+              {getMonthCountWarning(year2) && (
+                <div
+                  className="flex items-center"
+                  title={getMonthCountWarning(year2)?.isCurrent ? `Dados de ${getMonthCountWarning(year2)?.count} meses (esperado para ano atual)` : `Dados de ${getMonthCountWarning(year2)?.count} meses (incompleto)`}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* KPI Cards */}
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid gap-3 sm:grid-cols-3">
           <KPICard
             label="Total Acima do Teto"
             year1Value={comparison.year1.totalAboveTeto}
@@ -391,6 +407,11 @@ export function ComparativoClient({
             year2Label={String(year2)}
             growth={comparison.growth.totalAboveTeto}
             format={formatCompactCurrency}
+            icon={DollarSign}
+            gradientFrom="from-red-50"
+            borderColor="border-red-200"
+            iconBg="bg-red-100"
+            iconColor="text-red-600"
           />
           <KPICard
             label="Membros Acima do Teto"
@@ -400,6 +421,11 @@ export function ComparativoClient({
             year2Label={String(year2)}
             growth={comparison.growth.membersAboveTeto}
             format={formatNumber}
+            icon={Users}
+            gradientFrom="from-blue-50"
+            borderColor="border-blue-200"
+            iconBg="bg-blue-100"
+            iconColor="text-blue-600"
           />
           <KPICard
             label="Média por Membro"
@@ -409,94 +435,93 @@ export function ComparativoClient({
             year2Label={String(year2)}
             growth={comparison.growth.averageAboveTeto}
             format={formatCurrency}
+            icon={Calculator}
+            gradientFrom="from-amber-50"
+            borderColor="border-amber-200"
+            iconBg="bg-amber-100"
+            iconColor="text-amber-600"
           />
-          <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-            <span className="text-xs font-semibold text-gray-600">
-              Crescimento Total
-            </span>
-            <div className="mt-2 flex items-baseline justify-between">
-              <div className="flex flex-col">
-                <span className="text-lg font-bold text-gray-400">{year1}</span>
-                <span className="text-xl font-bold text-navy">
-                  {formatCompactCurrency(comparison.year1.totalAboveTeto)}
-                </span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="text-lg font-bold text-gray-400">{year2}</span>
-                <span className="text-xl font-bold text-navy">
-                  {formatCompactCurrency(comparison.year2.totalAboveTeto)}
-                </span>
-              </div>
-            </div>
-            <div className="mt-3 flex justify-center">
-              <GrowthIndicator value={comparison.growth.totalAboveTeto} />
-            </div>
-          </div>
         </div>
 
-        {/* Comparison Chart */}
-        <section className="mb-6 rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-          <h2 className="mb-4 font-serif text-lg font-bold text-navy">
-            Comparação de membros entre {year1} e {year2}
-          </h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={comparisonData}
-                layout="vertical"
-                margin={{ left: 120, right: 30 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  type="number" 
-                  tick={{ fontSize: 10, fill: "#94A3B8" }}
-                  tickFormatter={formatMillions}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 11, fill: "#64748B" }}
-                  width={110}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    
-                    const dataName = payload[0]?.payload?.name;
-                    
-                    return (
-                      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                        <div className="mb-2 font-medium text-gray-700">{dataName}</div>
-                        {payload.map((entry) => (
-                          <div key={entry.dataKey} className="flex items-center gap-2 text-sm">
-                            <span 
-                              className="h-2.5 w-2.5 rounded-full" 
-                              style={{ backgroundColor: entry.color }}
-                            />
-                            <span className="text-gray-500">{entry.name}:</span>
-                            <span className="font-medium text-gray-700">
-                              {dataName === "Membros Acima do Teto" 
-                                ? formatNumber(Number(entry.value)) 
-                                : formatCurrency(Number(entry.value))}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="year1Val" fill="#94A3B8" name={String(year1)} radius={[0, 4, 4, 0]} />
-                <Bar dataKey="year2Val" fill="#DC2626" name={String(year2)} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        {/* Top Organs Chart */}
+        {organChartData.length > 0 && (
+          <section className="mb-6 rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-serif text-lg font-bold text-navy">
+                Top 10 Órgãos — Média Mensal Acima do Teto
+              </h2>
+              <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#CBD5E1]" />
+                  {year1}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-primary" />
+                  {year2}
+                </span>
+              </div>
+            </div>
+            <div className="h-[420px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={organChartData}
+                  layout="vertical"
+                  margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
+                  barSize={14}
+                  barGap={2}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 10, fill: "#94A3B8" }}
+                    tickFormatter={(v) => formatCompactCurrency(v)}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="orgao"
+                    tick={{ fontSize: 12, fill: "#1E293B", fontWeight: 500, textAnchor: "start", dx: -105 }}
+                    width={110}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const orgao = payload[0]?.payload?.orgao;
+                      return (
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg">
+                          <div className="mb-1.5 text-xs font-bold text-navy">{orgao}</div>
+                          {payload.map((entry) => (
+                            <div key={entry.dataKey} className="flex items-center gap-2 text-xs">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: entry.color }}
+                              />
+                              <span className="text-gray-500">{entry.name}:</span>
+                              <span className="font-semibold text-gray-700">
+                                {formatCurrency(Number(entry.value))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="year1Val" fill="#CBD5E1" name={String(year1)} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="year2Val" fill="#DC2626" name={String(year2)} radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
 
         {/* Top Organs Table */}
         <section className="mb-6 rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
           <h2 className="mb-4 font-serif text-lg font-bold text-navy">
-            Órgãos por Total Acima do Teto
+            Órgãos por Média Mensal Acima do Teto
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -559,7 +584,7 @@ export function ComparativoClient({
                         {formatCompactCurrency(row.y2)}
                       </td>
                       <td className="py-2 text-right">
-                        <GrowthIndicator value={row.variation} />
+                        <GrowthBadge value={row.variation} />
                       </td>
                     </tr>
                   ))}

@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 const NAV_GROUPS = [
-{
+  {
     label: "Dados",
     links: [
       { href: "/", label: "Ranking", icon: Trophy },
